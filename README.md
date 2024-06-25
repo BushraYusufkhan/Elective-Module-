@@ -14,7 +14,7 @@ Once inside the container, run dnapipete on your reads.
 ```
 Run dnapipete one by one on your reads both the controls and the treatments.
 ### Extract some of the reads from the samples and make a pooled data using seqkit:
-Randomly extract 10% of the reads from all the samples and make pooled data one for the control and one for the treatments and later run dnapipete on this data.
+Randomly extract 10% of the reads from all the samples and make pooled data one for the controls and one for the treatments and later run dnapipete on this data.
 #### Controls:
 DF5062.Philipines.SRR24686397:
 ```
