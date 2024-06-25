@@ -12,7 +12,7 @@ Once you are inside the container, run dnapipete on your reads.
 ```
  python3 dnaPipeTE.py -input /mnt/input_raw_reads/SRR24686392_1.fastq.gz   -output /mnt/output/mauritius/1iteration/ -RM_lib /mnt/te_library/Otip_combined.deNovo-repeats.Dfam3.7.Nematodes_curatedonly.fa -genome_size 60424282 -genome_coverage 0.1 -sample_number 1 -cpu 30
 ```
-Run dnapipete one by one on your reads both the controls and the treatments. The parameters -genome_size and -genome_coverage were the same for all the reads.
+Run dnapipete one by one on your reads both the controls and the treatments.
 ### Extract some of the reads from the samples and make a pooled data using seqkit:
 Randomly extract 10% of the reads from all the samples and make pooled data one for the control and one for the treatments and later run dnapipete on this data.
 #### Controls:
