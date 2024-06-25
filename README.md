@@ -1,7 +1,8 @@
 # Elective-Module
 Commands used during the project.
 ## Does radiation cause TE activity:
-### Run DNApipeTE on your reads:
+### DNApipeTE:
+Used to quantify TEs in a sample.
 #### Mount your working directories onto the docker container:
 ```
  docker run -it -v /NVME2/Scratch/merrbii/chernobylData/rawReads:/mnt/input_raw_reads -v /NVME2/Scratch/merrbii/chernobylData/repAnnotations/TE_libraries:/mnt/te_library -v /home/bkhan/Scratch/chernobylData/dnapipite_results:/mnt/output clemgoub/dnapipete:latest
