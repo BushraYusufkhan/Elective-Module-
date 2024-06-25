@@ -36,8 +36,9 @@ DF5103.Germany.SRR24686396:
 ```
  seqkit sample -p 0.1 -s 254000 DF5103.Germany.SRR24686396_1.fastq.gz > /home/bkhan/Scratch/chernobylData/dnapipite_results/pooled_data_controls/subsampled.DF5103.Germany.SRR24686396_1.fastq.gz
 ```
-concatenate your files into one file.
+Concatenate your files into one file.
 cat *fastq.gz > concatenated_pooled_data_controls.fastq
+
 Now mount your working directories accordingly and run dnapipete.
 ```
  python3 dnaPipeTE.py -input /mnt/input_reads/concatenated_pooled_data_controls.fastq -output /mnt/output/2iteration/ -RM_lib /mnt/te_library/Otip_combined.deNovo-repeats.Dfam3.7.Nematodes_curatedonly.fa -genome_size 60424282 -genome_coverage 0.1 -sample_number 2 -cpu 30
