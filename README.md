@@ -123,7 +123,7 @@ N50 was highest at iteration 2 (N50  -> 6313)
 ```
 fastqc *.fastq.gz
 ```
-#### Trimm using trimmomatic:
+#### Trim using trimmomatic:
 ```
  ls *_1.fastq.gz | sed 's/_1.fastq.gz//g' | nice parallel --jobs 15 --eta 'java -jar /home/bkhan/Scratch/program/Trimmomatic-0.39/trimmomatic-0.39.jar PE {}_1.fastq.gz {}_2.fastq.gz paired/{}_paired_1.fastq.gz unpaired/{}_unpaired_1.fastq.gz paired/{}_paired_2.fastq.gz unpaired/{}_unpaired_2.fastq.gz SLIDINGWINDOW:4:20 MINLEN:40'
 ```
