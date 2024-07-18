@@ -114,6 +114,7 @@ python3 dnaPipeTE.py -input /mnt/input_reads/concatenated_pooled_data_CEZ.fastq 
 ```
 N50 was highest at iteration 2 (N50  -> 6313)
 
+-------------------------------------------------------------------------------------------------------------------
 ### Detettore:
 #### Index the reference genome.
 ```
