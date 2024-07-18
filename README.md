@@ -114,6 +114,247 @@ python3 dnaPipeTE.py -input /mnt/input_reads/concatenated_pooled_data_CEZ.fastq 
 ```
 N50 was highest at iteration 2 (N50  -> 6313)
 
+### Detettore:
+#### Index the reference genome.
+```
+ bwa index -p ref_index CEZ-166.1.GCA_037178975.1_ASM3717897v1_genomic.fna
+```
+#### Check quality of the reads with fastqc:
+```
+fastqc *.fastq.gz
+```
+#### Trimm using trimmomatic:
+```
+ ls *_1.fastq.gz | sed 's/_1.fastq.gz//g' | nice parallel --jobs 15 --eta 'java -jar /home/bkhan/Scratch/program/Trimmomatic-0.39/trimmomatic-0.39.jar PE {}_1.fastq.gz {}_2.fastq.gz paired/{}_paired_1.fastq.gz unpaired/{}_unpaired_1.fastq.gz paired/{}_paired_2.fastq.gz unpaired/{}_unpaired_2.fastq.gz SLIDINGWINDOW:4:20 MINLEN:40'
+```
+#### Align and Sort reads:
+```
+#!/bin/bash
+
+# Path to indexed reference genome files (without the file extension)
+REF_PREFIX="/home/bkhan/Scratch/chernobylData/genome/ref_index"
+
+# Path to paired-end reads directory
+PAIRED_DIR="/home/bkhan/Scratch/chernobylData/rawReads/paired"
+
+# Directory to save sorted BAM files
+OUTPUT_DIR="/home/bkhan/Scratch/chernobylData/detettore_results"
+
+
+# Loop through each paired-end read pair
+for R1 in ${PAIRED_DIR}/*_1.fastq.gz; do
+    # Formulate the read pair filenames
+    R2=${R1/_1.fastq.gz/_2.fastq.gz}
+
+    # Extract sample name from file path
+    SAMPLE=$(basename $R1 _1.fastq.gz)
+
+    # Perform alignment with BWA MEM using 8 threads and indexed files
+    bwa mem -t 8 $REF_PREFIX $R1 $R2 > ${OUTPUT_DIR}/${SAMPLE}.aligned.sam
+
+    # Convert SAM to BAM and sort
+    samtools view -@ 8 -bS ${OUTPUT_DIR}/${SAMPLE}.aligned.sam | samtools sort -@ 8 -o ${OUTPUT_DIR}/${SAMPLE}.aligned_sorted.bam -
+
+    # Clean up intermediate SAM file
+    rm ${OUTPUT_DIR}/${SAMPLE}.aligned.sam
+done
+```
+Save this script and run it.
+
+#### Index the bam files:
+```
+find /home/bkhan/Scratch/chernobylData/detettore/ -maxdepth 1 -type f -name "*.bam" -exec samtools index {} \;
+```
+#### Run Detettore:
+Save this script and run it.
+```
+#!/bin/bash
+
+# Set input files which do not change for different samples
+ref="/home/bkhan/Scratch/chernobylData/genome/CEZ-166.1.GCA_037178975.1_ASM3717897v1_genomic.fna"
+annot="/home/bkhan/Scratch/chernobylData/TEannotation_file/CEZ-166.1.GCA_037178975.1_ASM3717897v1_genomic.fna.out.gff"
+telib="/home/bkhan/Scratch/chernobylData/TElibrary/Otip_combined.deNovo-repeats.Dfam3.7.Nematodes_curatedonly.fa"
+bampath_file="/home/bkhan/Scratch/chernobylData/detettore/paths_to_bam.txt"
+
+# Ensure the commands file is empty or create it if it doesn't exist
+> run_detettore.cmds
+
+# Check if the BAM path file exists
+if [ ! -f "$bampath_file" ]; then
+  echo "Error: BAM path file $bampath_file does not exist."
+  exit 1
+fi
+
+# Create a list of detettore commands, looping through a list containing paths to bam files.
+while IFS= read -r bampath; do
+  # Check if bampath is empty
+  if [ -z "$bampath" ]; then
+    echo "Warning: Found an empty line in $bampath_file. Skipping..."
+    continue
+  fi
+
+  # Extract the sample name from the BAM file path (e.g., /path/to/sample1.bam -> sample1)
+  sample=$(basename "$bampath" | cut -d'.' -f1)
+
+  # Check if sample extraction was successful
+  if [ -z "$sample" ]; then
+    echo "Error: Could not extract sample name from $bampath. Skipping..."
+    continue
+  fi
+
+  # Construct the detettore command for each BAM file
+  echo "\
+detettore \
+  -b $bampath \
+  -r $ref \
+  -a $annot \
+  -t $telib \
+  -o $sample \
+  -m tips taps \
+  -c 1 \
+  --require_split \
+  --keep \
+  --include_invariant" >> run_detettore.cmds
+
+done < "$bampath_file"
+
+# Ensure the commands file is not empty before running parallel
+if [ ! -s run_detettore.cmds ]; then
+  echo "Error: No commands were generated. Please check the BAM paths file and the script logic."
+  exit 1
+fi
+
+# Use GNU parallel to run 10 commands simultaneously. Save stderr and stdout to log files.
+parallel -j10 < run_detettore.cmds 2> err.log > stdout.log
+```
+#### Count the number of TE insertions and Deletions:
+```
+import os
+import pandas as pd
+import gzip
+
+def count_variants(vcf_file):
+    insertions = 0
+    deletions = 0
+    data = []
+
+    with gzip.open(vcf_file, 'rt') if vcf_file.endswith('.gz') else open(vcf_file, 'r') as file:
+        for line in file:
+            if line.startswith('#'):
+                continue
+            columns = line.strip().split('\t')
+            chrom = columns[0]
+            pos = columns[1]
+            ref = columns[3]
+            alt = columns[4]
+            info_field = columns[7]
+            info_parts = info_field.split(';')
+
+            svtype = None
+            svlen = None
+            end = None
+            meinfo = None
+            homseq = None
+            homlen = None
+
+            for part in info_parts:
+                if part.startswith('SVTYPE='):
+                    svtype = part.split('=')[1]
+                elif part.startswith('SVLEN='):
+                    svlen = part.split('=')[1]
+                elif part.startswith('END='):
+                    end = part.split('=')[1]
+                elif part.startswith('MEINFO='):
+                    meinfo = part.split('=')[1]
+                elif part.startswith('HOMSEQ='):
+                    homseq = part.split('=')[1]
+                elif part.startswith('HOMLEN='):
+                    homlen = part.split('=')[1]
+
+            if svtype == 'INS':
+                insertions += 1
+            elif svtype == 'DEL':
+                deletions += 1
+
+            data.append([chrom, pos, ref, alt, svtype, svlen, end, meinfo, homseq, homlen])
+
+    return insertions, deletions, data
+
+input_folder = '/home/bkhan/Scratch/chernobylData/detettore'
+output_folder = '/home/bkhan/Scratch/chernobylData/detettore/csvfiles'
+
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
+
+vcf_files = [f for f in os.listdir(input_folder) if f.endswith('.vcf') or f.endswith('.vcf.gz')]
+
+for vcf_file in vcf_files:
+    vcf_path = os.path.join(input_folder, vcf_file)
+    insertions, deletions, data = count_variants(vcf_path)
+    print(f'{vcf_file} - Total Insertions: {insertions}, Total Deletions: {deletions}')
+
+    csv_file = os.path.join(output_folder, vcf_file.replace('.vcf.gz', '').replace('.vcf', '') + '_variants.csv')
+    df = pd.DataFrame(data, columns=['CHROM', 'POS', 'REF', 'ALT', 'SVTYPE', 'SVLEN', 'END', 'MEINFO', 'HOMSEQ', 'HOMLEN'])
+    df.to_csv(csv_file, index=False)
+    print(f'Saved CSV for {vcf_file} to {csv_file}')
+```
+#### Create comparison plot from the csv files:
+```
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+
+def process_csv_files(input_folder):
+    csv_files = [f for f in os.listdir(input_folder) if f.endswith('.csv')]
+    summary = []
+
+    for csv_file in csv_files:
+        csv_path = os.path.join(input_folder, csv_file)
+        df = pd.read_csv(csv_path)
+
+        insertions = df[df['SVTYPE'] == 'INS'].shape[0]
+        deletions = df[df['SVTYPE'] == 'DEL'].shape[0]
+        print(f'{csv_file} - Total Insertions: {insertions}, Total Deletions: {deletions}')
+
+        summary.append({'File': csv_file, 'Insertions': insertions, 'Deletions': deletions})
+
+    return summary
+
+def plot_summary(summary, output_folder):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    df_summary = pd.DataFrame(summary)
+    df_summary.plot(kind='bar', x='File', y=['Insertions', 'Deletions'], figsize=(12, 6), color=['blue', 'red'])
+    plt.xlabel('CSV Files')
+    plt.ylabel('Count')
+    plt.title('Insertions and Deletions across CSV Files')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_folder, 'comparison_plot.png'))
+    plt.show()
+    print(f'Comparison plot saved to {os.path.join(output_folder, "comparison_plot.png")}')
+
+def main(input_folder, output_folder):
+    summary = process_csv_files(input_folder)
+    plot_summary(summary, output_folder)
+
+if __name__ == '__main__':
+    input_folder = '/home/bkhan/Scratch/chernobylData/detettore/csvfiles'
+    output_folder = '/home/bkhan/Scratch/chernobylData/detettore/csvfiles/plots'
+    main(input_folder, output_folder)
+```
+
+
+
+    
+
+
+
+
+
+
+
 
 
 
